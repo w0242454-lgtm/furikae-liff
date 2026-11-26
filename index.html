@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>振替申請（試作）</title>
+<title>振替申請</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   :root {
     --green: #06C755; --green-dark: #05a647; --bg: #f5f6f7; --card: #fff;
@@ -74,9 +75,10 @@
 </style>
 </head>
 <body>
-<header>振替申請<small>SEIZE 講師アカウント（LINEにつなぐ前の試作です）</small></header>
+<header>振替申請<small>SEIZE 講師アカウント</small></header>
 
 <main>
+  <div id="envWarn" class="notice hidden" role="status"></div>
   <div id="errors" class="errors hidden" role="alert"></div>
 
   <section class="card" id="step1">
@@ -150,7 +152,7 @@
       <button type="button" class="btn-sub" id="back">修正する</button>
       <button type="button" class="btn-main" id="send">送信する</button>
     </div>
-    <p id="sentMsg" class="proto hidden">（試作のため送信はしません。本番ではこの文章が先生の発言としてトークに送られ、画面が閉じます）</p>
+    <p id="sentMsg" class="proto hidden" role="status"></p>
   </div>
 </div>
 
@@ -233,7 +235,7 @@ function setReported(v) {
 }
 $('yes').addEventListener('click', () => setReported(true));
 $('no').addEventListener('click', () => setReported(false));
-$('close').addEventListener('click', () => alert('（試作）本番ではここで画面が閉じます'));
+$('close').addEventListener('click', closeApp);
 $('staff').addEventListener('change', refresh);
 ['student'].forEach(id => $(id).addEventListener('input', refresh));
 document.querySelectorAll('input[name=category]').forEach(r => r.addEventListener('change', refresh));
@@ -312,7 +314,48 @@ $('submit').addEventListener('click', () => {
   $('send').focus();
 });
 $('back').addEventListener('click', () => $('modal').classList.add('hidden'));
-$('send').addEventListener('click', () => $('sentMsg').classList.remove('hidden'));
+$('send').addEventListener('click', sendToTalk);
+
+// ===== LINE（LIFF）連携 =====
+const LIFF_ID = '2012813196-6uyKaZck';
+let liffReady = false;
+
+function showEnvWarn(msg) { const w = $('envWarn'); w.textContent = msg; w.classList.remove('hidden'); }
+function closeApp() {
+  if (liffReady && liff.isInClient()) liff.closeWindow();
+  else showEnvWarn('この画面は閉じて大丈夫です。');
+}
+async function sendToTalk() {
+  const msgEl = $('sentMsg'); const btn = $('send');
+  const text = $('preview').textContent;
+  if (!liffReady || !liff.isInClient()) {
+    msgEl.textContent = 'LINEアプリの中で開いたときだけ送信できます。講師アカウントのトーク画面のメニューから開き直してください。';
+    msgEl.classList.remove('hidden'); return;
+  }
+  btn.disabled = true; btn.textContent = '送信中…';
+  try {
+    await liff.sendMessages([{ type: 'text', text: text.slice(0, 5000) }]);
+    msgEl.textContent = '送信しました。'; msgEl.classList.remove('hidden');
+    setTimeout(() => liff.closeWindow(), 800);
+  } catch (err) {
+    console.error(err);
+    msgEl.textContent = '送信できませんでした（' + (err && (err.code || err.message) || '不明なエラー') +
+      '）。講師アカウントのトーク画面のメニューから開いているか確認して、もう一度お試しください。';
+    msgEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = '送信する';
+  }
+}
+(async () => {
+  if (typeof liff === 'undefined') { showEnvWarn('LINEの機能を読み込めませんでした。通信環境を確認して開き直してください。'); return; }
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    liffReady = true;
+    if (!liff.isInClient()) showEnvWarn('ブラウザで開いています。入力の確認はできますが、送信はLINEアプリの中からのみできます。');
+  } catch (err) {
+    console.error(err);
+    showEnvWarn('LINEとの接続に失敗しました（' + (err && (err.code || err.message)) + '）。');
+  }
+})();
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').classList.add('hidden'); });
 </script>
 </body>
