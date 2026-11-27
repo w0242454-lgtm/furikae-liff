@@ -287,7 +287,7 @@ function fmt(it) {
   return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]}) ${it.period}限 ${time}${it.subject ? ' ' + it.subject : ''}`;
 }
 function buildMessage(v) {
-  const lines = ['【振替申請】', `報告先：${v.staff}`,
+  const lines = ['【振替申請】',
     `生徒：${v.student}${v.grade ? ' ' + v.grade : ''}`, `区分：${v.category}`];
   if (v.reason) lines.push(`理由：${v.reason}`);
   for (const k of ['from', 'decided', 'wished']) {
@@ -297,6 +297,7 @@ function buildMessage(v) {
     arr.forEach(it => lines.push('・' + fmt(it)));
   }
   if (v.note) lines.push('', `備考：${v.note}`);
+  lines.push('', `報告した社員：${v.staff}`);
   return lines.join('\n');
 }
 
