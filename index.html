@@ -71,6 +71,11 @@
   .choice.on { background: var(--green); color: #fff; border-color: var(--green); }
   .closebtn { display: block; width: 100%; margin-top: 10px; padding: 10px; font: inherit; border-radius: 8px;
     border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  .hint { font-size: 13px; color: var(--sub); margin: 4px 0 8px; }
+  .sub { margin-top: 12px; }
+  .unk { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sub); margin-top: 8px; }
+  .unk input { width: 18px; height: 18px; accent-color: var(--green); }
+  .warn { background: var(--warn-bg); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 8px; }
   .proto { font-size: 12px; color: var(--sub); text-align: center; margin: 4px 0 12px; }
 </style>
 </head>
@@ -103,7 +108,8 @@
     <section class="card">
       <h2>基本情報</h2>
       <label class="field"><span>生徒氏名 <span class="req">必須</span></span>
-        <input type="text" id="student" placeholder="例：山田太郎" autocomplete="off"></label>
+        <input type="text" id="student" placeholder="例：山田 たろう" autocomplete="off" maxlength="20">
+        <span class="hint" style="display:block">下の名前まで入力してください（下の名前はひらがなでも可・20文字まで）</span></label>
       <label class="field"><span>学年 <span class="opt">任意</span></span>
         <select id="grade"></select></label>
       <div class="field"><span style="display:block;font-size:13px;color:var(--sub);margin-bottom:4px">区分 <span class="req">必須</span></span>
@@ -112,8 +118,8 @@
           <label><input type="radio" name="category" value="講師都合"><span>講師都合</span></label>
         </div>
       </div>
-      <label class="field" style="margin-top:10px"><span>理由 <span class="opt">任意</span></span>
-        <textarea id="reason" placeholder="例：学会のため"></textarea></label>
+      <label class="field" style="margin-top:10px"><span>理由 <span id="reasonTag" class="opt">任意</span></span>
+        <textarea id="reason" placeholder="例：学会のため" maxlength="200"></textarea></label>
     </section>
 
     <section class="card">
@@ -123,16 +129,31 @@
     </section>
 
     <section class="card">
-      <h2>振替決定日 <span class="opt">決まっていれば</span></h2>
-      <div id="list-decided"></div>
-      <button type="button" class="add" data-add="decided">＋ 決定日を追加</button>
-    </section>
-
-    <section class="card">
-      <h2>振替希望日 <span class="opt">未定なら</span></h2>
-      <div id="list-wished"></div>
-      <button type="button" class="add" data-add="wished">＋ 希望日を追加</button>
-      <p class="err" style="color:var(--sub)">決定日か希望日のどちらかを1件以上入れてください。</p>
+      <h2>振替先 <span class="req">必須</span></h2>
+      <p class="hint">振替日は決まっていますか？</p>
+      <div class="seg">
+        <button type="button" class="choice" id="destDecided">決まっている</button>
+        <button type="button" class="choice" id="destUndecided">未定</button>
+      </div>
+      <div id="decidedBox" class="sub hidden">
+        <p class="hint">生徒と決めた振替日を入力してください。</p>
+        <div id="list-decided"></div>
+        <button type="button" class="add" data-add="decided">＋ 決定日を追加</button>
+      </div>
+      <div id="undecidedBox" class="sub hidden">
+        <p class="hint">未定の場合、どちらかを選んでください。</p>
+        <div class="seg">
+          <button type="button" class="choice" id="undWish">希望日を入れる</button>
+          <button type="button" class="choice" id="undMemo">これから調整</button>
+        </div>
+        <div id="wishBox" class="sub hidden">
+          <div id="list-wished"></div>
+          <button type="button" class="add" data-add="wished">＋ 希望日を追加</button>
+        </div>
+        <div id="memoBox" class="sub hidden">
+          <textarea id="destMemo" maxlength="100" placeholder="例：テスト前に調整予定"></textarea>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -148,6 +169,7 @@
   <div class="modal">
     <h3 id="mtitle">この内容でトークに送信します</h3>
     <div class="chatbg"><div id="preview" class="bubble"></div></div>
+    <div id="mismatch" class="warn hidden" role="note"></div>
     <div class="btns">
       <button type="button" class="btn-sub" id="back">修正する</button>
       <button type="button" class="btn-main" id="send">送信する</button>
@@ -177,6 +199,7 @@ GRADES.forEach(g => $('grade').add(new Option(g || '選択しない', g)));
 const lists = { from: [], decided: [], wished: [] };
 let seq = 0;
 let reported = null;
+let dest = null, undMode = null;
 
 function toMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 function periodAllowed(p, dateStr) {
@@ -199,8 +222,10 @@ function addRow(kind, focus) {
       <div><input type="date" class="d" aria-label="${LABEL[kind]}の日付"><div class="wd"></div></div>
       <div><select class="p" aria-label="${LABEL[kind]}の時限"><option value="">時限</option>
         ${PERIODS.map(([p, t]) => `<option value="${p}">${p}限 ${t}</option>`).join('')}</select></div>
-      ${HAS_SUBJECT[kind] ? `<div class="full"><input type="text" class="s" placeholder="科目（例：数学）" aria-label="${LABEL[kind]}の科目"></div>` : ''}
-    </div>`;
+      ${HAS_SUBJECT[kind] ? `<div class="full"><input type="text" class="s" placeholder="科目（例：数学）" maxlength="20" aria-label="${LABEL[kind]}の科目"></div>` : ''}
+    </div>
+    ${kind === 'from' ? `<label class="unk"><input type="checkbox" class="u"> 日時が分からない</label>
+      <input type="text" class="w hidden" maxlength="50" placeholder="いつ頃か（例：12月上旬の数学の授業）" aria-label="振替元のいつ頃か" style="margin-top:6px">` : ''}`;
   const d = row.querySelector('.d'), p = row.querySelector('.p'), wd = row.querySelector('.wd');
   d.addEventListener('change', () => {
     if (d.value) {
@@ -213,6 +238,14 @@ function addRow(kind, focus) {
     refresh();
   });
   p.addEventListener('change', refresh);
+  const u = row.querySelector('.u');
+  if (u) u.addEventListener('change', () => {
+    const grid = row.querySelector('.row-grid');
+    [d, p].forEach(el => { el.disabled = u.checked; el.closest('div').classList.toggle('hidden', u.checked); });
+    row.querySelector('.w').classList.toggle('hidden', !u.checked);
+    if (u.checked) row.querySelector('.w').focus();
+    refresh();
+  });
   row.querySelector('.del').addEventListener('click', () => {
     lists[kind] = lists[kind].filter(r => r !== row); row.remove(); renumber(kind); refresh();
   });
@@ -224,7 +257,7 @@ function addRow(kind, focus) {
 function renumber(kind) { lists[kind].forEach((r, i) => r.querySelector('.num').textContent = `${LABEL[kind]} ${i + 1}`); }
 
 document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addRow(b.dataset.add, true)));
-addRow('from'); addRow('decided');
+addRow('from');
 
 function setReported(v) {
   reported = v;
@@ -237,23 +270,52 @@ $('yes').addEventListener('click', () => setReported(true));
 $('no').addEventListener('click', () => setReported(false));
 $('close').addEventListener('click', closeApp);
 $('staff').addEventListener('change', refresh);
+function setDest(v) {
+  dest = v;
+  $('destDecided').classList.toggle('on', v === 'decided'); $('destUndecided').classList.toggle('on', v === 'undecided');
+  $('decidedBox').classList.toggle('hidden', v !== 'decided');
+  $('undecidedBox').classList.toggle('hidden', v !== 'undecided');
+  if (v === 'decided' && !lists.decided.length) addRow('decided');
+  refresh();
+}
+function setUnd(v) {
+  undMode = v;
+  $('undWish').classList.toggle('on', v === 'wish'); $('undMemo').classList.toggle('on', v === 'memo');
+  $('wishBox').classList.toggle('hidden', v !== 'wish');
+  $('memoBox').classList.toggle('hidden', v !== 'memo');
+  if (v === 'wish' && !lists.wished.length) addRow('wished');
+  if (v === 'memo') $('destMemo').focus();
+  refresh();
+}
+$('destDecided').addEventListener('click', () => setDest('decided'));
+$('destUndecided').addEventListener('click', () => setDest('undecided'));
+$('undWish').addEventListener('click', () => setUnd('wish'));
+$('undMemo').addEventListener('click', () => setUnd('memo'));
+function updateReasonTag() {
+  const c = document.querySelector('input[name=category]:checked');
+  const req = c && c.value === '講師都合';
+  const t = $('reasonTag'); t.textContent = req ? '講師都合は必須' : '任意'; t.className = req ? 'req' : 'opt';
+}
 ['student'].forEach(id => $(id).addEventListener('input', refresh));
-document.querySelectorAll('input[name=category]').forEach(r => r.addEventListener('change', refresh));
+document.querySelectorAll('input[name=category]').forEach(r => r.addEventListener('change', () => { updateReasonTag(); refresh(); }));
 
 // ===== 入力チェック =====
 function collect() {
   const items = {};
   for (const k of Object.keys(lists)) {
     items[k] = lists[k].map(r => ({
+      unknown: !!(r.querySelector('.u') && r.querySelector('.u').checked),
+      when: ((r.querySelector('.w') || {}).value || '').trim(),
       date: r.querySelector('.d').value, period: r.querySelector('.p').value,
-      subject: (r.querySelector('.s') || {}).value || ''
+      subject: ((r.querySelector('.s') || {}).value || '').trim()
     }));
   }
   const cat = document.querySelector('input[name=category]:checked');
   return {
     staff: $('staff').value, student: $('student').value.trim(),
     grade: $('grade').value, category: cat ? cat.value : '', reason: $('reason').value.trim(),
-    note: $('note').value.trim(), items
+    note: $('note').value.trim(), items,
+    dest, undMode, destMemo: $('destMemo').value.trim()
   };
 }
 function validate(v) {
@@ -261,10 +323,15 @@ function validate(v) {
   if (!v.staff) e.push('報告した社員を選んでください');
   if (!v.student) e.push('生徒氏名を入れてください');
   if (!v.category) e.push('区分を選んでください');
-  for (const k of Object.keys(v.items)) {
+  if (v.category === '講師都合' && !v.reason) e.push('講師都合の場合は理由を入れてください');
+  const check = ['from'];
+  if (v.dest === 'decided') check.push('decided');
+  if (v.dest === 'undecided' && v.undMode === 'wish') check.push('wished');
+  for (const k of check) {
     const seen = {};
     v.items[k].forEach((it, i) => {
       const tag = `${LABEL[k]} ${i + 1}`;
+      if (it.unknown) { if (!it.when) e.push(`${tag}：いつ頃かを入れてください`); return; }
       if (!it.date || !it.period) e.push(`${tag}：日付と時限を入れてください`);
       else if (!periodAllowed(it.period, it.date)) e.push(`${tag}：日曜は${it.period}限がありません`);
       const key = it.date + it.period;
@@ -272,7 +339,13 @@ function validate(v) {
     });
   }
   if (!v.items.from.length) e.push('振替元を1件以上入れてください');
-  if (!v.items.decided.length && !v.items.wished.length) e.push('振替決定日か振替希望日を1件以上入れてください');
+  if (!v.dest) e.push('振替先が「決まっている」か「未定」かを選んでください');
+  else if (v.dest === 'decided' && !v.items.decided.length) e.push('振替決定日を1件以上入れてください');
+  else if (v.dest === 'undecided') {
+    if (!v.undMode) e.push('未定の場合は「希望日を入れる」か「これから調整」を選んでください');
+    else if (v.undMode === 'wish' && !v.items.wished.length) e.push('希望日を1件以上入れてください');
+    else if (v.undMode === 'memo' && !v.destMemo) e.push('調整予定の内容を入れてください（例：テスト前に調整予定）');
+  }
   return e;
 }
 function refresh() {
@@ -282,6 +355,7 @@ function refresh() {
 
 // ===== 送信文の作成 =====
 function fmt(it) {
+  if (it.unknown) return `日時未定（${it.when}）${it.subject ? ' ' + it.subject : ''}`;
   const d = new Date(it.date + 'T00:00:00');
   const time = PERIODS.find(x => x[0] === it.period)[1];
   return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]}) ${it.period}限 ${time}${it.subject ? ' ' + it.subject : ''}`;
@@ -290,11 +364,16 @@ function buildMessage(v) {
   const lines = ['【振替申請】',
     `生徒：${v.student}${v.grade ? ' ' + v.grade : ''}`, `区分：${v.category}`];
   if (v.reason) lines.push(`理由：${v.reason}`);
-  for (const k of ['from', 'decided', 'wished']) {
-    const arr = v.items[k];
-    if (!arr.length) continue;
-    lines.push('', `■${LABEL[k]} ${arr.length}件`);
-    arr.forEach(it => lines.push('・' + fmt(it)));
+  lines.push('', `■振替元 ${v.items.from.length}件`);
+  v.items.from.forEach(it => lines.push('・' + fmt(it)));
+  if (v.dest === 'decided') {
+    lines.push('', `■振替決定 ${v.items.decided.length}件`);
+    v.items.decided.forEach(it => lines.push('・' + fmt(it)));
+  } else if (v.undMode === 'wish') {
+    lines.push('', `■振替先：未定（希望日 ${v.items.wished.length}件）`);
+    v.items.wished.forEach(it => lines.push('・' + fmt(it)));
+  } else {
+    lines.push('', '■振替先：未定', '・' + v.destMemo);
   }
   if (v.note) lines.push('', `備考：${v.note}`);
   lines.push('', `報告した社員：${v.staff}`);
@@ -310,6 +389,11 @@ $('submit').addEventListener('click', () => {
   }
   box.classList.add('hidden');
   $('preview').textContent = buildMessage(v);
+  const mm = $('mismatch');
+  if (v.dest === 'decided' && v.items.from.length !== v.items.decided.length) {
+    mm.textContent = `※振替元（${v.items.from.length}件）と振替決定（${v.items.decided.length}件）の件数が違います。このままでよければ「送信する」を押してください。`;
+    mm.classList.remove('hidden');
+  } else mm.classList.add('hidden');
   $('sentMsg').classList.add('hidden');
   $('modal').classList.remove('hidden');
   $('send').focus();
