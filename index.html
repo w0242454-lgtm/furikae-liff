@@ -108,8 +108,8 @@
     <section class="card">
       <h2>基本情報</h2>
       <label class="field"><span>生徒氏名 <span class="req">必須</span></span>
-        <input type="text" id="student" placeholder="例：山田 たろう" autocomplete="off" maxlength="20">
-        <span class="hint" style="display:block">下の名前まで入力してください（下の名前はひらがなでも可・20文字まで）</span></label>
+        <input type="text" id="student" placeholder="例：山田 太郎" autocomplete="off" maxlength="20">
+        <span id="studentHint" class="hint" style="display:block">下の名前まで入力してください</span></label>
       <label class="field"><span>学年 <span class="opt">任意</span></span>
         <select id="grade"></select></label>
       <div class="field"><span style="display:block;font-size:13px;color:var(--sub);margin-bottom:4px">区分 <span class="req">必須</span></span>
@@ -186,6 +186,7 @@ const PERIODS = [
   ['2', '16:40-18:10'], ['3', '18:20-19:50'], ['4', '20:00-21:30']
 ];
 const SUNDAY_CLOSE = '18:30';
+const STUDENT_MIN = 3;  // 生徒氏名の最低文字数（空白を除く）
 const GRADES = ['', '小1','小2','小3','小4','小5','小6','中1','中2','中3','高1','高2','高3','高卒'];
 const WD = ['日','月','火','水','木','金','土'];
 const LABEL = { from: '振替元', decided: '振替決定', wished: '振替希望' };
@@ -321,7 +322,13 @@ function collect() {
 function validate(v) {
   const e = [];
   if (!v.staff) e.push('報告した社員を選んでください');
+  const nameLen = v.student.replace(/[\s\u3000]/g, '').length;
+  const nameShort = nameLen < STUDENT_MIN;
   if (!v.student) e.push('生徒氏名を入れてください');
+  else if (nameShort) e.push('生徒氏名は下の名前まで入力してください（下の名前はひらがなでもOKです）');
+  const hint = $('studentHint');
+  hint.textContent = (v.student && nameShort) ? '下の名前まで入力してください（下の名前はひらがなでもOKです）' : '下の名前まで入力してください';
+  hint.style.color = (v.student && nameShort) ? 'var(--err)' : '';
   if (!v.category) e.push('区分を選んでください');
   if (v.category === '講師都合' && !v.reason) e.push('講師都合の場合は理由を入れてください');
   const check = ['from'];
