@@ -141,16 +141,18 @@
         <button type="button" class="add" data-add="decided">＋ 決定日を追加</button>
       </div>
       <div id="undecidedBox" class="sub hidden">
-        <p class="hint">未定の場合、どちらかを選んでください。</p>
+        <p class="hint">生徒と振替先の相談はしていますか？</p>
         <div class="seg">
-          <button type="button" class="choice" id="undWish">希望日を入れる</button>
-          <button type="button" class="choice" id="undMemo">これから調整</button>
+          <button type="button" class="choice" id="undMemo">相談している</button>
+          <button type="button" class="choice" id="undWish">相談していない</button>
         </div>
         <div id="wishBox" class="sub hidden">
+          <p class="hint">振替の候補日を1つ以上入力してください。</p>
           <div id="list-wished"></div>
-          <button type="button" class="add" data-add="wished">＋ 希望日を追加</button>
+          <button type="button" class="add" data-add="wished">＋ 候補日を追加</button>
         </div>
         <div id="memoBox" class="sub hidden">
+          <p class="hint">相談の状況を入力してください。</p>
           <textarea id="destMemo" maxlength="100" placeholder="例：テスト前に調整予定"></textarea>
         </div>
       </div>
@@ -189,7 +191,7 @@ const SUNDAY_CLOSE = '18:30';
 const STUDENT_MIN = 3;  // 生徒氏名の最低文字数（空白を除く）
 const GRADES = ['', '小1','小2','小3','小4','小5','小6','中1','中2','中3','高1','高2','高3','高卒'];
 const WD = ['日','月','火','水','木','金','土'];
-const LABEL = { from: '振替元', decided: '振替決定', wished: '振替希望' };
+const LABEL = { from: '振替元', decided: '振替決定', wished: '候補日' };
 const HAS_SUBJECT = { from: true, decided: true, wished: false };
 
 // ===== 初期化 =====
@@ -349,9 +351,9 @@ function validate(v) {
   if (!v.dest) e.push('振替先が「決まっている」か「未定」かを選んでください');
   else if (v.dest === 'decided' && !v.items.decided.length) e.push('振替決定日を1件以上入れてください');
   else if (v.dest === 'undecided') {
-    if (!v.undMode) e.push('未定の場合は「希望日を入れる」か「これから調整」を選んでください');
-    else if (v.undMode === 'wish' && !v.items.wished.length) e.push('希望日を1件以上入れてください');
-    else if (v.undMode === 'memo' && !v.destMemo) e.push('調整予定の内容を入れてください（例：テスト前に調整予定）');
+    if (!v.undMode) e.push('生徒と振替先の相談をしているかを選んでください');
+    else if (v.undMode === 'wish' && !v.items.wished.length) e.push('候補日を1件以上入れてください');
+    else if (v.undMode === 'memo' && !v.destMemo) e.push('相談の状況を入れてください（例：テスト前に調整予定）');
   }
   return e;
 }
@@ -377,10 +379,10 @@ function buildMessage(v) {
     lines.push('', `■振替決定 ${v.items.decided.length}件`);
     v.items.decided.forEach(it => lines.push('・' + fmt(it)));
   } else if (v.undMode === 'wish') {
-    lines.push('', `■振替先：未定（希望日 ${v.items.wished.length}件）`);
+    lines.push('', `■振替先：未定・生徒と未相談（候補日 ${v.items.wished.length}件）`);
     v.items.wished.forEach(it => lines.push('・' + fmt(it)));
   } else {
-    lines.push('', '■振替先：未定', '・' + v.destMemo);
+    lines.push('', '■振替先：未定・生徒と相談中', '・' + v.destMemo);
   }
   if (v.note) lines.push('', `備考：${v.note}`);
   lines.push('', `報告した社員：${v.staff}`);
